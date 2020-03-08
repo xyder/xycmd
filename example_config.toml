@@ -1,0 +1,9 @@
+[app]
+loop_iteration_seconds = 30
+
+[app.jira]
+server = "https://my-jira-server.com"
+username = "my_user_name"
+api_key = "my-api-key"
+hours_per_day = 6
+sprint_field_name = "customfield_11002"
