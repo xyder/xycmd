@@ -1,9 +1,13 @@
 [app]
-loop_iteration_seconds = 30
 
 [app.jira]
+# the FQDN of the jira server
 server = "https://my-jira-server.com"
+# your username
 username = "my_user_name"
+# api key as generated from: https://id.atlassian.com/manage/api-tokens
 api_key = "my-api-key"
+# the number of hours to add up to a work day. Typically 8h, or 6h counting 2h communication overhead
 hours_per_day = 6
+# the field that represents the sprint in which a ticket was added. currently mandatory.
 sprint_field_name = "customfield_11002"
