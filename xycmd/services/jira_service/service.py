@@ -131,7 +131,7 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
 
             for w in worklogs:
                 total_h += w.time_spent_h
-                wls_str.append(click.style(f'({w.issue} - {w.time_spent_h:2.2f}h)', fg='bright_black'))
+                wls_str.append(click.style(f'({w.issue} - {w.time_spent_h:2.2f}h)', fg='white'))
 
             wls_str = ', '.join(wls_str) or '-'
 
