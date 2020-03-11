@@ -31,8 +31,8 @@ vim config.toml
 # show worklogs help
 poetry run python xycmd jira worklogs --help
 
-# show worklogs made by xyder in project PRJ starting 14 days ago and loop every 30 seconds.
-poetry run python xycmd jira worklogs -p PRJ -a xyder -d 14 -l 30
+# show worklogs made by xyder@email.com in project PRJ starting 14 days ago and loop every 30 seconds.
+poetry run python xycmd jira worklogs -p PRJ -a xyder@email.com -d 14 -l 30
 ```
 
 ## TODO

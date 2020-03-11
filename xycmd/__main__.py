@@ -33,7 +33,7 @@ def jira():
 @click.option(
     '-p', '--project', type=click.STRING, default='', help='Filter by JIRA project key.')
 @click.option(
-    '-a', '--worklog-author', type=click.STRING, default='', help='Filter by worklog author.')
+    '-a', '--worklog-author', type=click.STRING, default='', help='Filter by worklog author email.')
 @click.option(
     '-d', '--days', type=click.INT, default=0, help='Filter since X days ago.')
 @click.option(

@@ -40,7 +40,7 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
         query.append(f'project = {project}')
 
     if worklog_author:
-        query.append(f'worklogAuthor = {worklog_author}')
+        query.append(f'worklogAuthor = "{worklog_author}"')
 
     if since_date:
         query.append(f'worklogDate >= {str(since_date)}')
@@ -59,6 +59,9 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
 
     for ticket in tickets:
         for worklog in ticket.fields.worklog.worklogs:
+            if worklog_author and worklog.author.emailAddress != worklog_author:
+                continue
+
             ticket_sprints = []
 
             for s in getattr(ticket.fields, CONFIG.jira.sprint_field_name):
