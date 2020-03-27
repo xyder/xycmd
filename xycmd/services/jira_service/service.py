@@ -87,6 +87,8 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
                 log_date=parse(worklog.started).date(),
                 sprint=None)
 
+            # todo: properly handle sprints without start and end dates or not started
+            sprint = None
             for s in ticket_sprints:
                 if s.contains_worklog(w):
                     sprint = s
@@ -101,7 +103,7 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
         if w.sprint:
             continue
 
-        for s in sprints:
+        for s in sprints.values():
             if s.contains_worklog(w):
                 w.sprint = s
                 break
