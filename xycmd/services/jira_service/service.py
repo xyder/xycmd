@@ -12,118 +12,8 @@ from xycmd.config import CONFIG
 from .models import Sprint, Issue, Worklog
 
 
-def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int = 0, since_date: str = None):
-    since_date = since_date or None
-
-    if since_date:
-        if isinstance(since_date, datetime):
-            since_date = since_date.date()
-        elif isinstance(since_date, str):
-            since_date = parse(since_date)
-        else:
-            # hopefully this is a date type by now, otherwise BOOM
-            pass
-
-    elif days_ago:
-        since_date = datetime.now().date() - timedelta(days=days_ago)
-
-    jira = JIRA(
-        server=CONFIG.jira.server,
-        basic_auth=(
-            CONFIG.jira.username,
-            CONFIG.jira.api_key
-        ))
-
-    query = []
-
-    if project:
-        query.append(f'project = {project}')
-
-    if worklog_author:
-        query.append(f'worklogAuthor = "{worklog_author}"')
-
-    if since_date:
-        query.append(f'worklogDate >= {str(since_date)}')
-
-    # ordered to maximize chance of getting relevant issues first
-    query = ' AND '.join(query) + ' ORDER BY updated DESC'
-
-    tickets = jira.search_issues(
-        jql_str=query,
-        maxResults=0,
-        fields=f'worklog,{CONFIG.jira.sprint_field_name}')
-
-    days = {}
-    worklogs = []
-    sprints = {}
-
-    for ticket in tickets:
-        for worklog in ticket.fields.worklog.worklogs:
-            if worklog_author and worklog.author.emailAddress != worklog_author:
-                continue
-
-            ticket_sprints = []
-
-            for s in getattr(ticket.fields, CONFIG.jira.sprint_field_name):
-                sprint_id = re.search(r'id=(\d+)', s)
-                if not sprint_id:
-                    # well, nothing we can do about this
-                    logging.debug(f'No sprint id found in {s}.')
-                    continue
-
-                sprint_id = sprint_id.group(1)
-
-                if sprint_id not in sprints:
-                    jira_sprint = jira.sprint(sprint_id)
-                    sprints[sprint_id] = Sprint.from_jira(jira_sprint)
-
-                ticket_sprints.append(sprints[sprint_id])
-
-            # todo: make a from_jira function
-            w = Worklog(
-                issue=ticket.key,
-                uid=worklog.id,
-                time_spent=int(worklog.timeSpentSeconds),
-                log_date=parse(worklog.started).date(),
-                sprint=None)
-
-            # todo: properly handle sprints without start and end dates or not started
-            sprint = None
-            for s in ticket_sprints:
-                if s.contains_worklog(w):
-                    sprint = s
-                    break
-
-            w.sprint = sprint
-
-            worklogs.append(w)
-
-    # add sprint to worklogs based on time interval, rather than issue relationship
-    for w in worklogs:
-        if w.sprint:
-            continue
-
-        for s in sprints.values():
-            if s.contains_worklog(w):
-                w.sprint = s
-                break
-
-    sorted_sprints = {k: v for k, v in sorted(sprints.items(), key=lambda item: item[1].start_date or date(1970, 1, 1))}
-
-    for s in sorted_sprints.values():
-        if not s.end_date or not s.start_date:
-            continue
-        s.worklogs = {str(s.start_date + timedelta(days=k)): list() for k in range(0, (s.end_date - s.start_date).days + 1)}
-
-
-    for w in worklogs:
-        sprint = sorted_sprints[str(w.sprint.uid)]
-        if str(w.log_date) not in sprint.worklogs:
-            sprint.worklogs[str(w.log_date)] = list()
-
-        sprint.worklogs[str(w.log_date)].append(w)
-
-    for sprint in sorted_sprints.values():
+def render_worklogs(sprints):
+    for sprint in sprints.values():
         sprint_title = f'\nSprint "{sprint.name}" - {sprint.state}'
         click.secho(sprint_title, fg='green')
 
@@ -150,4 +40,122 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
 
             click.secho(f'    {day_str[2:]} - {calendar.day_name[day.weekday()][:3]} | {total_h:2.2f}h / {total_d:2.2f}d | {wls_str}', fg=fg)
 
-    return jira, tickets, days
+
+def get_tickets(jira, project=None, worklog_author=None, since_date=None):
+    query = []
+
+    if project:
+        query.append(f'project = {project}')
+
+    if worklog_author:
+        query.append(f'worklogAuthor = "{worklog_author}"')
+
+    if since_date:
+        query.append(f'worklogDate >= {str(since_date)}')
+
+    # ordered to maximize chance of getting relevant issues first
+    query = ' AND '.join(query) + ' ORDER BY updated DESC'
+
+    return jira.search_issues(
+        jql_str=query,
+        maxResults=0,
+        fields=f'worklog,{CONFIG.jira.sprint_field_name}')
+
+
+
+def gather_sprints_and_worklogs(jira, tickets, worklog_author):
+    sprints = dict()
+    worklogs = list()
+
+    for ticket in tickets:
+
+        ticket_sprints = []
+
+        # gather the ticket sprints
+        for sprint in getattr(ticket.fields, CONFIG.jira.sprint_field_name):
+            sprint_id = str(sprint.id)
+
+            sprints[sprint_id] = sprints.get(
+                sprint_id, Sprint.from_jira(jira.sprint(sprint_id)))
+
+            ticket_sprints.append(sprints[sprint_id])
+
+        for worklog in ticket.fields.worklog.worklogs:
+            if worklog_author and worklog.author.emailAddress != worklog_author:
+                continue
+
+            w = Worklog.from_jira(ticket.key, worklog)
+
+            # todo: properly handle sprints without start and end dates or not started
+            sprint = None
+            for s in ticket_sprints:
+                if s.contains_worklog(w):
+                    sprint = s
+                    break
+
+            w.sprint = sprint
+
+            worklogs.append(w)
+
+    return sprints, worklogs
+
+
+def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int = 0, since_date: str = None):
+    since_date = since_date or None
+
+    if since_date:
+        if isinstance(since_date, datetime):
+            since_date = since_date.date()
+        elif isinstance(since_date, str):
+            since_date = parse(since_date)
+        else:
+            # hopefully this is a date type by now, otherwise BOOM
+            pass
+
+    elif days_ago:
+        since_date = datetime.now().date() - timedelta(days=days_ago)
+
+    jira = JIRA(
+        server=CONFIG.jira.server,
+        basic_auth=(
+            CONFIG.jira.username,
+            CONFIG.jira.api_key
+        ))
+
+    tickets = get_tickets(jira, project, worklog_author, since_date)
+
+    sprints, worklogs = gather_sprints_and_worklogs(jira, tickets, worklog_author)
+
+    # add sprint to worklogs based on time interval, rather than issue relationship
+    for w in worklogs:
+        if not w.sprint:
+            for s in sprints.values():
+                if s.contains_worklog(w):
+                    w.sprint = s
+                    break
+
+        # still didn't find a sprint for this worklog
+        if not w.sprint:
+            # todo: maybe add sprint-less worklogs to a catch-all bucket
+            continue
+
+        sprint = sprints[str(w.sprint.uid)]
+        log_date = str(w.log_date)
+
+        sprint.worklogs[log_date] = sprint.worklogs.get(log_date, list())
+        sprint.worklogs[log_date].append(w)
+
+    sorted_sprints = {k: v for k, v in sorted(sprints.items(), key=lambda item: item[1].start_date or date(1970, 1, 1))}
+
+    # add missing days to each sprint
+    for s in sorted_sprints.values():
+        if not s.end_date or not s.start_date:
+            continue
+
+        dates = {
+            str(s.start_date + timedelta(days=k)): list()
+            for k in range(0, (s.end_date - s.start_date).days + 1)}
+        dates.update(s.worklogs)
+        s.worklogs = dates
+
+    render_worklogs(sorted_sprints)

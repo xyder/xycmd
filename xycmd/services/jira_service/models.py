@@ -37,6 +37,15 @@ class Worklog(BaseModel):
     def time_spent_d(self):
         return round(self._time_spent_d_raw, 2)
 
+    @classmethod
+    def from_jira(cls, issue_key, worklog):
+        return cls(
+            issue=issue_key,
+            uid=worklog.id,
+            time_spent=int(worklog.timeSpentSeconds),
+            log_date=parse(worklog.started).date(),
+            sprint=None)
+
 
 @dataclass
 class Issue(BaseModel):
