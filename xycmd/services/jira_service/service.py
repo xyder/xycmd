@@ -72,7 +72,8 @@ def gather_sprints_and_worklogs(jira, tickets, worklog_author):
         ticket_sprints = []
 
         # gather the ticket sprints
-        for sprint in getattr(ticket.fields, CONFIG.jira.sprint_field_name):
+        temp_sprints = getattr(ticket.fields, CONFIG.jira.sprint_field_name) or []
+        for sprint in temp_sprints:
             sprint_id = str(sprint.id)
 
             sprints[sprint_id] = sprints.get(
