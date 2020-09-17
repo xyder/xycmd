@@ -5,7 +5,7 @@ from functools import partial
 import click
 
 from xycmd.config import CONFIG
-from xycmd.services.jira_service import get_worklogs
+from xycmd.services.jira_service import fetch_and_render_worklogs
 
 
 
@@ -41,7 +41,7 @@ def jira():
 def worklogs(loop, project, worklog_author, days, since_date):
     """ Print a pretty table with worklogs. It is recommended to filter as much as possible, just in case. """
 
-    cmd = partial(get_worklogs, project=project, worklog_author=worklog_author, days_ago=days, since_date=since_date)
+    cmd = partial(fetch_and_render_worklogs, project=project, worklog_author=worklog_author, days_ago=days, since_date=since_date)
     if loop:
         looper(cmd, loop)
     else:

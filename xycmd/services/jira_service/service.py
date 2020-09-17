@@ -7,19 +7,20 @@ import re
 import click
 from dateutil.parser import parse
 from jira import JIRA
+from tabulate import tabulate
 
 from xycmd.config import CONFIG
 from .models import Sprint, Issue, Worklog
 
 
 def render_worklogs(sprints):
+    table_header = ['Date', 'Logged (h / d)', 'Left (h)', 'Worklogs']
+
     for sprint in sprints.values():
-        sprint_title = f'\nSprint "{sprint.name}" - {sprint.state}'
-        click.secho(sprint_title, fg='green')
+        sprint_table = list()
+        line_fg = 'white'
 
-        fg = 'white'
         for day_str, worklogs in sprint.worklogs.items():
-
             total_h = 0
             total_d = 0
             wls_str = []
@@ -28,17 +29,31 @@ def render_worklogs(sprints):
                 total_h += w.time_spent_h
                 wls_str.append(click.style(f'({w.issue} - {w.time_spent_h:2.2f}h)', fg='white'))
 
+
             wls_str = ', '.join(wls_str) or '-'
 
             total_d = round(total_h / CONFIG.jira.hours_per_day, 2)
-            day = parse(day_str)
 
-            if fg == 'white':
-                fg = 'blue'
-            else:
-                fg = 'white'
+            week_day = calendar.day_name[parse(day_str).weekday()][:3]
 
-            click.secho(f'    {day_str[2:]} - {calendar.day_name[day.weekday()][:3]} | {total_h:2.2f}h / {total_d:2.2f}d | {wls_str}', fg=fg)
+            left_h = CONFIG.jira.hours_per_day - total_h
+            if left_h < 0 or week_day in ['Sat', 'Sun']:
+                left_h = 0
+
+            line_fg = 'blue' if line_fg == 'white' else 'white'
+
+            sprint_table.append([
+                click.style(f'{week_day} {day_str}', fg=line_fg),
+                click.style(f'{total_h:2.2f} / {total_d:2.2f}', fg=line_fg),
+                '-' if left_h == 0 else click.style(f'{left_h:2.2f}', fg='red'),
+                wls_str
+                ])
+
+        # render a sprint
+        sprint_title = f'\nSprint "{sprint.name}" - {sprint.state}\n'
+        click.secho(sprint_title, fg='green')
+
+        click.echo(tabulate(sprint_table, headers=table_header, tablefmt='github'))
 
 
 def get_tickets(jira, project=None, worklog_author=None, since_date=None):
@@ -128,6 +143,7 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
     sprints, worklogs = gather_sprints_and_worklogs(jira, tickets, worklog_author)
 
     # add sprint to worklogs based on time interval, rather than issue relationship
+    sprintless_worklogs = []
     for w in worklogs:
         if not w.sprint:
             for s in sprints.values():
@@ -137,7 +153,7 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
 
         # still didn't find a sprint for this worklog
         if not w.sprint:
-            # todo: maybe add sprint-less worklogs to a catch-all bucket
+            sprintless_worklogs.append(w)
             continue
 
         sprint = sprints[str(w.sprint.uid)]
@@ -159,4 +175,20 @@ def get_worklogs(project: str = None, worklog_author: str = None, days_ago: int 
         dates.update(s.worklogs)
         s.worklogs = dates
 
+    return sorted_sprints, sprintless_worklogs
+
+
+def fetch_and_render_worklogs(project: str = None, worklog_author: str = None, days_ago: int = 0, since_date: str = None):
+    sorted_sprints, sprintless_worklogs = get_worklogs(
+        project=project,
+        worklog_author=worklog_author,
+        days_ago=days_ago,
+        since_date=since_date)
+
     render_worklogs(sorted_sprints)
+
+    if sprintless_worklogs:
+        click.echo()
+
+        for w in sprintless_worklogs:
+            click.secho(f'Warning: Found sprintless worklog for issue {w.issue} for {w.time_spent_h} h on {w.log_date}.', fg='red')
